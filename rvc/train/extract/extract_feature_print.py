@@ -19,6 +19,10 @@ os.environ["CUDA_VISIBLE_DEVICES"] = str(i_gpu)
 version = sys.argv[6]
 is_half = bool(sys.argv[7])
 embedder_model = sys.argv[8]
+try:
+    embedder_model_custom = sys.argv[9]
+except:
+    embedder_model_custom = None
 
 
 wav_path = f"{exp_dir}/1_16k_wavs"
@@ -40,7 +44,7 @@ def read_wave(wav_path, normalize=False):
 
 
 print("Starting feature extraction...")
-models, saved_cfg, task = load_embedding(embedder_model)
+models, saved_cfg, task = load_embedding(embedder_model, embedder_model_custom)
 model = models[0]
 model = model.to(device)
 if device not in ["mps", "cpu"]:
@@ -55,7 +59,7 @@ if len(todo) == 0:
         "An error occurred in the feature extraction, make sure you have provided the audios correctly."
     )
 else:
-    print(f"{len(todo)}")
+    # print(f"{len(todo)}")
     with tqdm.tqdm(total=len(todo)) as pbar:
         for idx, file in enumerate(todo):
             try:
@@ -85,7 +89,7 @@ else:
                     if np.isnan(feats).sum() == 0:
                         np.save(out_file_path, feats, allow_pickle=False)
                     else:
-                        print(f"{file} - contains nan")
+                        print(f"{file} is invalid")
                     pbar.set_description(f"Processing {file} {feats.shape}")
             except Exception as error:
                 print(error)

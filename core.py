@@ -55,6 +55,7 @@ def run_infer_script(
     clean_strength,
     export_format,
     embedder_model,
+    embedder_model_custom,
     upscale_audio,
 ):
     f0autotune = "True" if str(f0autotune) == "True" else "False"
@@ -78,6 +79,7 @@ def run_infer_script(
         clean_strength,
         export_format,
         embedder_model,
+        embedder_model_custom,
         upscale_audio,
     )
     return f"File {input_path} inferred successfully.", output_path.replace(
@@ -104,6 +106,7 @@ def run_batch_infer_script(
     clean_strength,
     export_format,
     embedder_model,
+    embedder_model_custom,
     upscale_audio,
 ):
     f0autotune = "True" if str(f0autotune) == "True" else "False"
@@ -144,6 +147,7 @@ def run_batch_infer_script(
                 clean_strength,
                 export_format,
                 embedder_model,
+                embedder_model_custom,
                 upscale_audio,
             )
 
@@ -172,6 +176,7 @@ def run_tts_script(
     clean_strength,
     export_format,
     embedder_model,
+    embedder_model_custom,
     upscale_audio,
 ):
     f0autotune = "True" if str(f0autotune) == "True" else "False"
@@ -210,6 +215,7 @@ def run_tts_script(
         clean_strength,
         export_format,
         embedder_model,
+        embedder_model_custom,
         upscale_audio,
     )
 
@@ -219,7 +225,7 @@ def run_tts_script(
 
 
 # Preprocess
-def run_preprocess_script(model_name, dataset_path, sampling_rate):
+def run_preprocess_script(model_name, dataset_path, sampling_rate, cpu_cores):
     per = 3.0 if config.is_half else 3.7
     preprocess_script_path = os.path.join("rvc", "train", "preprocess", "preprocess.py")
     command = [
@@ -232,6 +238,7 @@ def run_preprocess_script(model_name, dataset_path, sampling_rate):
                 dataset_path,
                 sampling_rate,
                 per,
+                cpu_cores,
             ],
         ),
     ]
@@ -243,7 +250,14 @@ def run_preprocess_script(model_name, dataset_path, sampling_rate):
 
 # Extract
 def run_extract_script(
-    model_name, rvc_version, f0method, hop_length, sampling_rate, embedder_model
+    model_name,
+    rvc_version,
+    f0method,
+    hop_length,
+    cpu_cores,
+    sampling_rate,
+    embedder_model,
+    embedder_model_custom,
 ):
     model_path = os.path.join(logs_path, model_name)
     extract_f0_script_path = os.path.join(
@@ -262,6 +276,7 @@ def run_extract_script(
                 model_path,
                 f0method,
                 hop_length,
+                cpu_cores,
             ],
         ),
     ]
@@ -279,6 +294,7 @@ def run_extract_script(
                 rvc_version,
                 "True",
                 embedder_model,
+                embedder_model_custom,
             ],
         ),
     ]
@@ -307,6 +323,7 @@ def run_train_script(
     pretrained,
     custom_pretrained,
     sync_graph,
+    cache_data_in_gpu,
     g_pretrained_path=None,
     d_pretrained_path=None,
 ):
@@ -315,6 +332,7 @@ def run_train_script(
     save_every = 1 if str(save_every_weights) == "True" else 0
     detector = 1 if str(overtraining_detector) == "True" else 0
     sync = 1 if str(sync_graph) == "True" else 0
+    cache_data = 1 if str(cache_data_in_gpu) == "True" else 0
 
     if str(pretrained) == "True":
         if str(custom_pretrained) == "False":
@@ -356,7 +374,7 @@ def run_train_script(
                 "-l",
                 latest,
                 "-c",
-                "0",
+                cache_data,
                 "-sw",
                 save_every,
                 "-f0",
@@ -571,8 +589,14 @@ def parse_arguments():
         "--embedder_model",
         type=str,
         help="Embedder model",
-        choices=["contentvec", "hubert"],
-        default="hubert",
+        choices=["contentvec", "custom"],
+        default="contentvec",
+    )
+    infer_parser.add_argument(
+        "--embedder_model_custom",
+        type=str,
+        help="Custom Embedder model",
+        default=None,
     )
     infer_parser.add_argument(
         "--upscale_audio",
@@ -696,8 +720,14 @@ def parse_arguments():
         "--embedder_model",
         type=str,
         help="Embedder model",
-        choices=["contentvec", "hubert"],
-        default="hubert",
+        choices=["contentvec", "custom"],
+        default="contentvec",
+    )
+    batch_infer_parser.add_argument(
+        "--embedder_model_custom",
+        type=str,
+        help="Custom Embedder model",
+        default=None,
     )
     batch_infer_parser.add_argument(
         "--upscale_audio",
@@ -835,8 +865,14 @@ def parse_arguments():
         "--embedder_model",
         type=str,
         help="Embedder model",
-        choices=["contentvec", "hubert"],
-        default="hubert",
+        choices=["contentvec", "custom"],
+        default="contentvec",
+    )
+    tts_parser.add_argument(
+        "--embedder_model_custom",
+        type=str,
+        help="Custom Embedder model",
+        default=None,
     )
     tts_parser.add_argument(
         "--upscale_audio",
@@ -859,6 +895,13 @@ def parse_arguments():
         type=str,
         help="Sampling rate",
         choices=["32000", "40000", "48000"],
+    )
+    preprocess_parser.add_argument(
+        "--cpu_cores",
+        type=str,
+        help="Number of CPU cores to use",
+        choices=[str(i) for i in range(1, 64)],
+        default=None,
     )
 
     # Parser for 'extract' mode
@@ -897,6 +940,13 @@ def parse_arguments():
         default="128",
     )
     extract_parser.add_argument(
+        "--cpu_cores",
+        type=str,
+        help="Number of CPU cores to use",
+        choices=[str(i) for i in range(1, 64)],
+        default=None,
+    )
+    extract_parser.add_argument(
         "--sampling_rate",
         type=str,
         help="Sampling rate",
@@ -906,8 +956,14 @@ def parse_arguments():
         "--embedder_model",
         type=str,
         help="Embedder model",
-        choices=["contentvec", "hubert"],
-        default="hubert",
+        choices=["contentvec", "custom"],
+        default="contentvec",
+    )
+    extract_parser.add_argument(
+        "--embedder_model_custom",
+        type=str,
+        help="Custom Embedder model",
+        default=None,
     )
 
     # Parser for 'train' mode
@@ -1023,6 +1079,13 @@ def parse_arguments():
         "--sync_graph",
         type=str,
         help="Sync graph",
+        choices=["True", "False"],
+        default="False",
+    )
+    train_parser.add_argument(
+        "--cache_data_in_gpu",
+        type=str,
+        help="Cache data in GPU",
         choices=["True", "False"],
         default="False",
     )
@@ -1211,6 +1274,7 @@ def main():
                 str(args.clean_strength),
                 str(args.export_format),
                 str(args.embedder_model),
+                str(args.embedder_model_custom),
                 str(args.upscale_audio),
             )
         elif args.mode == "batch_infer":
@@ -1232,6 +1296,7 @@ def main():
                 str(args.clean_strength),
                 str(args.export_format),
                 str(args.embedder_model),
+                str(args.embedder_model_custom),
                 str(args.upscale_audio),
             )
         elif args.mode == "tts":
@@ -1256,6 +1321,7 @@ def main():
                 str(args.clean_strength),
                 str(args.export_format),
                 str(args.embedder_model),
+                str(args.embedder_model_custom),
                 str(args.upscale_audio),
             )
         elif args.mode == "preprocess":
@@ -1263,6 +1329,7 @@ def main():
                 str(args.model_name),
                 str(args.dataset_path),
                 str(args.sampling_rate),
+                str(args.cpu_cores),
             )
         elif args.mode == "extract":
             run_extract_script(
@@ -1270,8 +1337,10 @@ def main():
                 str(args.rvc_version),
                 str(args.f0method),
                 str(args.hop_length),
+                str(args.cpu_cores),
                 str(args.sampling_rate),
                 str(args.embedder_model),
+                str(args.embedder_model_custom),
             )
         elif args.mode == "train":
             run_train_script(
@@ -1290,6 +1359,7 @@ def main():
                 str(args.pretrained),
                 str(args.custom_pretrained),
                 str(args.sync_graph),
+                str(args.cache_data_in_gpu),
                 str(args.g_pretrained_path),
                 str(args.d_pretrained_path),
             )
